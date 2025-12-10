@@ -19,6 +19,8 @@ func main() {
 		log.Fatalf("Ошибка инициализации БД: %v", err)
 	}
 
+	defer db.Close()
+
 	log.Println("База данных готова")
 
 	server.Run()

@@ -123,19 +123,33 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 // updateTaskHandler обрабатывает PUT запросы для обновления задач
 func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var req TaskRequest
-	var err error
-
 	contentType := r.Header.Get("Content-Type")
+
+	idFromURL := r.URL.Query().Get("id")
+
+	var jsonRaw map[string]*json.RawMessage
 
 	if strings.Contains(contentType, "application/json") {
 		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&req); err != nil {
-			writeJSONError(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+
+		if err := decoder.Decode(&jsonRaw); err != nil {
+			writeJSONError(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
+
+		rawBytes, _ := json.Marshal(jsonRaw)
+		if err := json.Unmarshal(rawBytes, &req); err != nil {
+			writeJSONError(w, "Invalid JSON data", http.StatusBadRequest)
+			return
+		}
+
+		if req.ID == "" && idFromURL != "" {
+			req.ID = idFromURL
+		}
+
 	} else {
 		if err := r.ParseForm(); err != nil {
-			writeJSONError(w, "Failed to parse form data", http.StatusBadRequest)
+			writeJSONError(w, "Failed to parse form", http.StatusBadRequest)
 			return
 		}
 
@@ -144,17 +158,16 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		req.Title = r.FormValue("title")
 		req.Comment = r.FormValue("comment")
 		req.Repeat = r.FormValue("repeat")
+
+		if req.ID == "" && idFromURL != "" {
+			req.ID = idFromURL
+		}
 	}
 
 	if req.ID == "" {
-		req.ID = r.URL.Query().Get("id")
-	}
-
-	if req.ID == "" {
-		writeJSONError(w, "task id is required (provide in JSON or URL parameter)", http.StatusBadRequest)
+		writeJSONError(w, "task id is required", http.StatusBadRequest)
 		return
 	}
-
 	if _, err := strconv.Atoi(req.ID); err != nil {
 		writeJSONError(w, "invalid task id", http.StatusBadRequest)
 		return
@@ -175,8 +188,22 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	if req.Comment != "" {
 		existing.Comment = req.Comment
 	}
-	if req.Repeat != "" || (req.Repeat == "" && r.FormValue("repeat") == "") {
-		existing.Repeat = req.Repeat
+
+	if strings.Contains(contentType, "application/json") {
+		if _, exists := jsonRaw["repeat"]; exists {
+			existing.Repeat = req.Repeat
+		}
+	} else {
+		if r.Form.Has("repeat") {
+			existing.Repeat = req.Repeat
+		}
+	}
+
+	if req.Repeat != "" {
+		if req.Repeat != "y" && !strings.HasPrefix(req.Repeat, "d ") {
+			writeJSONError(w, "invalid repeat format", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if _, err := validateAndPrepareTask(TaskRequest{
@@ -199,6 +226,7 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 // validateAndPrepareTask валидирует и подготавливает задачу
 func validateAndPrepareTask(req TaskRequest, isUpdate bool) (*db.Task, error) {
+
 	if req.Title == "" {
 		return nil, fmt.Errorf("title is required")
 	}
@@ -232,6 +260,12 @@ func validateAndPrepareTask(req TaskRequest, isUpdate bool) (*db.Task, error) {
 	now = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	taskDate = time.Date(taskDate.Year(), taskDate.Month(), taskDate.Day(), 0, 0, 0, 0, taskDate.Location())
 
+	if isUpdate {
+		if taskDate.Before(now) {
+			return nil, fmt.Errorf("date cannot be in the past")
+		}
+	}
+
 	if req.Repeat != "" {
 		if req.Repeat != "y" && !strings.HasPrefix(req.Repeat, "d ") {
 			return nil, fmt.Errorf("invalid repeat format")
@@ -242,6 +276,7 @@ func validateAndPrepareTask(req TaskRequest, isUpdate bool) (*db.Task, error) {
 			if len(parts) != 2 {
 				return nil, fmt.Errorf("invalid repeat format")
 			}
+
 			days, err := strconv.Atoi(parts[1])
 			if err != nil || days < 1 || days > 400 {
 				return nil, fmt.Errorf("invalid repeat format")
@@ -263,7 +298,6 @@ func validateAndPrepareTask(req TaskRequest, isUpdate bool) (*db.Task, error) {
 		}
 	}
 
-	// Создаем задачу
 	task := &db.Task{
 		ID:      req.ID,
 		Date:    req.Date,

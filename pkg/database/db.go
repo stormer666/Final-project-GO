@@ -63,10 +63,6 @@ func Init(dbFile string) error {
 
 // AddTask добавляет задачу в базу данных
 func AddTask(date, title, comment, repeat string) (int64, error) {
-	if DB == nil {
-		return 0, fmt.Errorf("database not initialized")
-	}
-
 	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)`
 	result, err := DB.Exec(query, date, title, comment, repeat)
 	if err != nil {
@@ -83,10 +79,6 @@ func AddTask(date, title, comment, repeat string) (int64, error) {
 
 // GetTask возвращает задачу по ID
 func GetTask(id string) (*Task, error) {
-	if DB == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
 	query := `SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?`
 	row := DB.QueryRow(query, id)
 
@@ -102,41 +94,8 @@ func GetTask(id string) (*Task, error) {
 	return &task, nil
 }
 
-// GetAllTasks возвращает все задачи отсортированные по дате
-func GetAllTasks() ([]Task, error) {
-	if DB == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	query := `SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date`
-	rows, err := DB.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tasks: %w", err)
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var task Task
-		if err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat); err != nil {
-			return nil, fmt.Errorf("failed to scan task: %w", err)
-		}
-		tasks = append(tasks, task)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
-	}
-
-	return tasks, nil
-}
-
 // UpdateTask обновляет задачу
 func UpdateTask(task *Task) error {
-	if DB == nil {
-		return fmt.Errorf("database not initialized")
-	}
-
 	query := `UPDATE scheduler SET date = ?, title = ?, comment = ?, repeat = ? WHERE id = ?`
 	result, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, task.ID)
 	if err != nil {
@@ -157,10 +116,6 @@ func UpdateTask(task *Task) error {
 
 // DeleteTask удаляет задачу
 func DeleteTask(id string) error {
-	if DB == nil {
-		return fmt.Errorf("database not initialized")
-	}
-
 	query := `DELETE FROM scheduler WHERE id = ?`
 	result, err := DB.Exec(query, id)
 	if err != nil {
@@ -180,9 +135,6 @@ func DeleteTask(id string) error {
 }
 
 func Tasks(limit int) ([]Task, error) {
-	if DB == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
 
 	if limit <= 0 {
 		limit = 50
@@ -217,10 +169,6 @@ func Tasks(limit int) ([]Task, error) {
 
 // UpdateDate обновляет дату задачи
 func UpdateDate(id string, date string) error {
-	if DB == nil {
-		return fmt.Errorf("database not initialized")
-	}
-
 	query := `UPDATE scheduler SET date = ? WHERE id = ?`
 	result, err := DB.Exec(query, date, id)
 	if err != nil {
@@ -236,5 +184,13 @@ func UpdateDate(id string, date string) error {
 		return fmt.Errorf("task not found")
 	}
 
+	return nil
+}
+
+func Close() error {
+	if DB != nil {
+		log.Println("Закрытие соединения с БД")
+		return DB.Close()
+	}
 	return nil
 }

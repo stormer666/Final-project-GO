@@ -24,8 +24,8 @@ type TaskRequest struct {
 
 // TasksResponse структура для ответа со списком задач
 type TasksResponse struct {
-	Tasks []db.Task `json:"tasks"`
-	Error string    `json:"error,omitempty"`
+	Tasks  []db.Task `json:"tasks"`
+	Result string    `json:"error,omitempty"`
 }
 
 // writeJSON записывает JSON ответ
@@ -48,7 +48,7 @@ func writeJSONError(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 // writeJSONSuccess записывает пустой успешный JSON ответ
 func writeJSONSuccess(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(struct{}{})
+	w.Write([]byte(`{}`))
 }
